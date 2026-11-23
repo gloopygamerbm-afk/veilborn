@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#05030a" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Veilborn</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #05030a; overflow: hidden; position: fixed; inset: 0;
+      touch-action: none; overscroll-behavior: none;
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; }
+    canvas { display: block; touch-action: none; }
+    #rotate { display: none; position: fixed; inset: 0; z-index: 99; background: #05030a; color: #d9c2ff;
+      font: 22px Georgia, serif; text-align: center; align-items: center; justify-content: center; flex-direction: column; }
+    #rotate b { font-size: 64px; display: block; margin-bottom: 14px; }
+    @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="rotate"><div><b>&#8635;</b>Turn your phone sideways to play</div></div>
+  <!-- Phaser is bundled locally (needed for Steam/offline); falls back to CDN if lib/phaser.min.js is missing -->
+  <script src="lib/phaser.min.js" onerror="document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js&quot;><\/script>')"></script>
+  <script src="js/assets_data.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
