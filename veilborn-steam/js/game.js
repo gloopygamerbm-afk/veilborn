@@ -231,7 +231,14 @@ class GameScene extends Phaser.Scene {
     const ptr = this.input.activePointer;
     const spawnX = this.p.x, spawnY = this.p.y - 56;
     let angle;
-    if (ptr && (ptr.isDown || ptr.x > 0 || ptr.y > 0)) {
+    const TI = window.TOUCH_INPUT;
+    if (TI && TI.isTouch) {
+      if (TI.aim) {                                   // finger on the playfield = aim + fire
+        const wp = this.cameras.main.getWorldPoint(TI.aim.x, TI.aim.y);
+        angle = Phaser.Math.Angle.Between(spawnX, spawnY, wp.x, wp.y);
+        this.facing = wp.x < spawnX ? -1 : 1; this.p.setFlipX(this.facing < 0);
+      } else angle = this.facing > 0 ? 0 : Math.PI;   // ATK button = straight ahead
+    } else if (ptr && (ptr.isDown || ptr.x > 0 || ptr.y > 0)) {
       const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
       angle = Phaser.Math.Angle.Between(spawnX, spawnY, wp.x, wp.y);
       this.facing = wp.x < spawnX ? -1 : 1;
@@ -410,16 +417,16 @@ class GameScene extends Phaser.Scene {
     const edge = (n, v) => { const r = v && !pe[n]; pe[n] = v; return r; };
     const eA = edge('a', b(0)), eB = edge('b', b(1)), eRB = edge('rb', b(5)), eRT = edge('rt', b(7)), eLB = edge('lb', b(4)), eUp = edge('up', ay < -0.7 || b(12));
     const ti = window.TOUCH_INPUT || {};
-    const tJump = ti.jumpEdge; if (ti.jumpEdge) ti.jumpEdge = false;
-    const tUse = ti.interactEdge; if (ti.interactEdge) ti.interactEdge = false;
-    const tCyc = ti.cycleEdge; if (ti.cycleEdge) ti.cycleEdge = false;
+    const take = (key) => { const v = !!ti[key]; if (v) ti[key] = false; return v; };
+    const tJump = take('jumpEdge'), tUse = take('interactEdge'), tCyc = take('cycleEdge');
+    const tp1 = take('pw0'), tp2 = take('pw1'), tp3 = take('pw2');
     return {
       left: k.a.isDown || c.left.isDown || ax < -0.35 || b(14) || !!ti.left,
       right: k.d.isDown || c.right.isDown || ax > 0.35 || b(15) || !!ti.right,
       jumpHeld: k.w.isDown || k.space.isDown || c.up.isDown || b(0) || !!ti.jump,
       jump: J(k.w) || J(k.space) || J(c.up) || eA || tJump,
-      attack: k.z.isDown || k.x.isDown || (this.input.activePointer.isDown && !ti.onBtn) || b(2) || !!ti.attack,
-      p1: J(k.one) || eB, p2: J(k.two) || eRB, p3: J(k.three) || eRT,
+      attack: k.z.isDown || k.x.isDown || (!ti.isTouch && this.input.activePointer.isDown) || b(2) || !!ti.attack,
+      p1: J(k.one) || eB || tp1, p2: J(k.two) || eRB || tp2, p3: J(k.three) || eRT || tp3,
       cycle: J(k.q) || eLB || tCyc,
       interact: J(k.e) || eUp || tUse
     };
@@ -454,6 +461,7 @@ class GameScene extends Phaser.Scene {
     p.setAlpha(now < RT.invisUntil ? 0.3 : now < RT.invulnUntil && Math.floor(now / 90) % 2 ? 0.55 : 1);
     this.glow.setPosition(p.x, p.y - 60);
     if (this.reticle) {
+      const TI = window.TOUCH_INPUT; this.reticle.setVisible(!(TI && TI.isTouch));
       const wp = this.cameras.main.getWorldPoint(this.input.activePointer.x, this.input.activePointer.y);
       this.reticle.setPosition(wp.x, wp.y);
       const curColor = SPELLS[SAVE.spell] ? SPELLS[SAVE.spell].color : 0xb48cff;
@@ -518,33 +526,37 @@ class UIScene extends Phaser.Scene {
     this.spellIcon.on('pointerdown', () => { const i = SAVE.spells.indexOf(SAVE.spell); SAVE.spell = SAVE.spells[(i + 1) % SAVE.spells.length]; persist(); AUDIO.sfx('ui'); });
     this.spellT = this.add.text(W - 70, 100, '', f(16)).setOrigin(0.5, 0).setDepth(11);
     this.add.text(W - 70, 124, 'Q', f(13, '#a894c8')).setOrigin(0.5, 0).setDepth(11);
-    // Bag / Inventory touch button
-    const bagBtn = this.add.rectangle(W - 146, 56, 58, 58, 0x241838, 0.88).setStrokeStyle(2, 0x9a6cff).setInteractive({ useHandCursor: true }).setDepth(11);
-    this.add.text(W - 146, 56, 'BAG\n[F]', f(11, '#e0d0ff')).setOrigin(0.5).setDepth(12);
-    bagBtn.on('pointerdown', () => this.toggleInv());
-    // Mobile Touch Virtual Controls
+    // ---- Unified touch controls (same layout & behaviour on iPhone, iPad and Android) ----
     const TI = window.TOUCH_INPUT = window.TOUCH_INPUT || {};
-    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 1000);
-    if (isTouch) {
-      const mkBtn = (x, y, r, lbl, onDn, onUp) => {
-        const c = this.add.circle(x, y, r, 0x221236, 0.58).setStrokeStyle(2, 0xa578ff, 0.85).setInteractive().setDepth(30);
-        this.add.text(x, y, lbl, { fontFamily: FONT, fontSize: (r > 38 ? 18 : 15) + 'px', color: '#f4e8ff', stroke: '#100518', strokeThickness: 3 }).setOrigin(0.5).setDepth(31);
-        c.on('pointerdown', () => { TI.onBtn = true; c.setFillStyle(0x7844cc, 0.82); onDn(); });
-        const up = () => { TI.onBtn = false; c.setFillStyle(0x221236, 0.58); onUp(); };
-        c.on('pointerup', up); c.on('pointerout', up);
-      };
-      // D-Pad Left / Right
-      mkBtn(80, H - 75, 42, '◀', () => { TI.left = true; }, () => { TI.left = false; });
-      mkBtn(180, H - 75, 42, '▶', () => { TI.right = true; }, () => { TI.right = false; });
-      // Action Buttons
-      mkBtn(W - 85, H - 85, 48, 'JUMP', () => { TI.jump = true; TI.jumpEdge = true; }, () => { TI.jump = false; });
-      mkBtn(W - 195, H - 85, 44, 'ATK', () => { TI.attack = true; }, () => { TI.attack = false; });
-      mkBtn(W - 140, H - 190, 36, '[E]', () => { TI.interactEdge = true; }, () => {});
-    }
-    this.slotIcons = [0, 1, 2].map(i => this.add.image(24 + i * 80 + 34, H - 64, 'dot').setVisible(false).setDepth(11));
-    [0, 1, 2].forEach(i => this.add.text(30 + i * 80, H - 100, String(i + 1), f(14, '#cdb8ff')).setDepth(12));
+    TI.forced = /[?&]touch=1/.test(location.search);
+    if (TI.isTouch === undefined) TI.isTouch = TI.forced || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    if (!TI.listening) { TI.listening = true; window.addEventListener('touchstart', () => { TI.isTouch = true; }, { passive: true }); }
+    this.input.addPointer(3);                       // allow 5 simultaneous fingers
+    this._tp = {};
+    const cx = (x, y, w, h) => ({ x, y, w, h });
+    this.TB = {                                      // logical 1280x720 coordinates
+      left: { x: 120, y: H - 120, r: 66 }, right: { x: 290, y: H - 120, r: 66 },
+      jump: { x: W - 120, y: H - 120, r: 76 }, atk: { x: W - 292, y: H - 104, r: 62 }, use: { x: W - 150, y: H - 282, r: 50 }
+    };
+    this.TB.hud = [{ x: W - 70, y: 56, r: 50 }, { x: W - 156, y: 56, r: 40 }, { x: W - 236, y: 56, r: 40 }];
+    this.touchLbl = [
+      this.add.text(this.TB.use.x, this.TB.use.y, 'E', { fontFamily: FONT, fontSize: '34px', color: '#fff2c8', stroke: '#100518', strokeThickness: 4 }).setOrigin(0.5).setDepth(31)
+    ];
+    // top HUD touch buttons: inventory + pause (also fine with a mouse)
+    const hudBtn = (b, lbl, fn) => {
+      const c = this.add.circle(b.x, b.y, b.r, 0x241838, 0.88).setStrokeStyle(2, 0x9a6cff).setInteractive().setDepth(11);
+      this.add.text(b.x, b.y, lbl, f(13, '#e0d0ff')).setOrigin(0.5).setDepth(12);
+      c.on('pointerdown', fn);
+    };
+    hudBtn(this.TB.hud[1], 'BAG\nF', () => this.toggleInv());
+    hudBtn(this.TB.hud[2], 'II', () => this.togglePause());
+    // power slots: on touch they sit under the mana bar and are tappable
+    this.slotY = TI.isTouch ? 84 : H - 100;
+    this.slotLabels = [0, 1, 2].map(i => this.add.text(30 + i * 80, this.slotY, String(i + 1), f(14, '#cdb8ff')).setDepth(12));
+    this.slotIcons = [0, 1, 2].map(i => this.add.image(24 + i * 80 + 34, this.slotY + 34, 'dot').setVisible(false).setDepth(11));
+    if (TI.isTouch) this.hintT_wrap = 540;
     this.bossT = this.add.text(740, 22, '', { fontFamily: FONT, fontSize: '24px', color: '#ffe0e8', stroke: '#2a0010', strokeThickness: 5 }).setOrigin(0.5, 0).setDepth(12).setVisible(false);
-    this.hintT = this.add.text(W / 2, H - 126, '', { fontFamily: FONT, fontSize: '24px', color: '#f4ecff', align: 'center', wordWrap: { width: 860 }, stroke: '#10061c', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(12);
+    this.hintT = this.add.text(W / 2, H - 126, '', { fontFamily: FONT, fontSize: '24px', color: '#f4ecff', align: 'center', wordWrap: { width: this.hintT_wrap || 860 }, stroke: '#10061c', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(12);
     this.promptT = this.add.text(W / 2, H - 76, '', { fontFamily: FONT, fontSize: '26px', color: '#ffe9a8', stroke: '#2a1a00', strokeThickness: 5 }).setOrigin(0.5).setDepth(12);
     this.toastT = this.add.text(W / 2, 140, '', { fontFamily: FONT, fontSize: '26px', color: '#f0e0ff', align: 'center', wordWrap: { width: 900 }, stroke: '#10061c', strokeThickness: 5 }).setOrigin(0.5).setDepth(12).setAlpha(0);
     this.bossShown = 0; this.curSpell = '';
@@ -652,7 +664,8 @@ class UIScene extends Phaser.Scene {
     g.lineStyle(3, SPELLS[SAVE.spell].color, 0.9).strokeCircle(W - 70, 56, 36);
     // power slots
     for (let i = 0; i < 3; i++) {
-      const x = 24 + i * 80, y0 = H - 100, id = SAVE.slots[i], ic = this.slotIcons[i];
+      const x = 24 + i * 80, y0 = this.slotY, id = SAVE.slots[i], ic = this.slotIcons[i];
+      ic.setPosition(x + 34, y0 + 34); this.slotLabels[i].setPosition(x + 6, y0 + 2);
       g.fillStyle(0x0d0614, 0.85).fillRoundedRect(x, y0, 68, 68, 10);
       if (id) {
         if (ic.texture.key !== 'pow_' + id) ic.setTexture('pow_' + id); ic.setVisible(true).setScale(0.95);
@@ -680,6 +693,48 @@ class UIScene extends Phaser.Scene {
     if (RT.hint) { const b = this.hintT.getBounds(); g.fillStyle(0x0d0614, 0.82).fillRoundedRect(b.x - 18, b.y - 12, b.width + 36, b.height + 24, 12); g.lineStyle(2, 0x8a6aba, 0.9).strokeRoundedRect(b.x - 18, b.y - 12, b.width + 36, b.height + 24, 12); }
     this.promptT.setText(RT.prompt || '');
     this.slowRect.setVisible(clock < (RT.slowUntil || 0));
+    this.pollTouch(); this.drawTouch(g);
+  }
+  // ---- touch: one polling routine = identical feel on iOS & Android ----
+  pollTouch() {
+    const TI = window.TOUCH_INPUT; if (!TI || !TI.isTouch) return;
+    const T = this.TB, tp = this._tp;
+    const blocked = this.inv || this.pauseOpen || !this.scene.isActive('Game');
+    const st = { left: false, right: false, jump: false, atk: false, use: false, pw: [false, false, false] };
+    let aim = null;
+    if (!blocked) {
+      const list = this.input.manager.pointers.slice(); if (TI.forced) list.push(this.input.mousePointer);
+      const hit = (b, x, y, k) => (x - b.x) * (x - b.x) + (y - b.y) * (y - b.y) <= (b.r * (k || 1.2)) * (b.r * (k || 1.2));
+      list.forEach(p => {
+        if (!p || !p.isDown) return;
+        const dx = p.downX, dy = p.downY;
+        if (dx < 440 && dy > H - 330) { if (p.x < 205) st.left = true; else st.right = true; return; }   // sliding d-pad zone
+        if (hit(T.jump, dx, dy, 1.3)) { st.jump = true; return; }
+        if (hit(T.atk, dx, dy, 1.3)) { st.atk = true; return; }
+        if (hit(T.use, dx, dy, 1.3)) { st.use = true; return; }
+        for (let i = 0; i < 3; i++) { const sx = 24 + i * 80; if (dx >= sx - 6 && dx <= sx + 74 && dy >= this.slotY - 6 && dy <= this.slotY + 74) { st.pw[i] = true; return; } }
+        if (T.hud.some(h => hit(h, dx, dy, 1.1))) return;
+        st.atk = true; aim = { x: p.x, y: p.y };                                                            // free area: aim + fire
+      });
+    }
+    const edge = (k, v) => { const r = v && !tp[k]; tp[k] = v; return r; };
+    TI.left = st.left; TI.right = st.right; TI.jump = st.jump; TI.attack = st.atk; TI.aim = aim;
+    if (edge('jump', st.jump)) TI.jumpEdge = true;
+    if (edge('use', st.use)) TI.interactEdge = true;
+    st.pw.forEach((v, i) => { if (edge('p' + i, v)) TI['pw' + i] = true; });
+    this.tst = st;
+  }
+  drawTouch(g) {
+    const TI = window.TOUCH_INPUT; this.touchLbl.forEach(t => t.setVisible(!!(TI && TI.isTouch)));
+    if (!TI || !TI.isTouch || this.inv || this.pauseOpen) { this.touchLbl.forEach(t => t.setVisible(false)); return; }
+    const T = this.TB, s = this.tst || { pw: [] };
+    const disc = (b, on, col) => { g.fillStyle(on ? 0x7a48d0 : 0x1a0e2c, on ? 0.78 : 0.55).fillCircle(b.x, b.y, b.r); g.lineStyle(3, col || 0xa578ff, on ? 1 : 0.8).strokeCircle(b.x, b.y, b.r); };
+    disc(T.left, s.left); disc(T.right, s.right); disc(T.jump, s.jump); disc(T.atk, s.atk, SPELLS[SAVE.spell].color); disc(T.use, s.use, 0xffd98a);
+    g.fillStyle(0xf2e8ff, 0.95);
+    const tri = (b, d) => g.fillTriangle(b.x + d * 24, b.y, b.x - d * 14, b.y - 24, b.x - d * 14, b.y + 24);
+    tri(T.left, -1); tri(T.right, 1);
+    g.fillTriangle(T.jump.x, T.jump.y - 30, T.jump.x - 30, T.jump.y + 14, T.jump.x + 30, T.jump.y + 14);
+    g.fillStyle(SPELLS[SAVE.spell].color, 0.95).fillCircle(T.atk.x, T.atk.y, 22); g.fillStyle(0xffffff, 0.9).fillCircle(T.atk.x, T.atk.y, 10);
   }
 }
 
@@ -696,11 +751,21 @@ class VictoryScene extends Phaser.Scene {
 }
 
 window.addEventListener('load', () => {
-  new Phaser.Game({
+  const game = new Phaser.Game({
     type: Phaser.AUTO, width: W, height: H, parent: 'game', backgroundColor: '#05030a',
     render: { antialias: true, pixelArt: false, roundPixels: false },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    input: { activePointers: 4 },
     physics: { default: 'arcade', arcade: { gravity: { y: 1800 }, debug: false } },
     scene: [BootScene, MenuScene, GameScene, UIScene, VictoryScene]
   });
+  // iOS Safari / Android Chrome both report stale sizes right after rotation: refresh a few times
+  const refresh = () => [50, 300, 800].forEach(t => setTimeout(() => game.scale.refresh(), t));
+  window.addEventListener('orientationchange', refresh); window.addEventListener('resize', refresh);
+  // browsers (esp. iOS) suspend audio until a touch; resume on every touch/click
+  const wake = () => { try { AUDIO.init(); } catch (e) {} };
+  window.addEventListener('touchend', wake, { passive: true }); window.addEventListener('pointerdown', wake, { passive: true });
+  // block pinch-zoom, double-tap-zoom, long-press menus and pull-to-refresh on both platforms
+  ['gesturestart', 'gesturechange', 'gestureend', 'contextmenu', 'dblclick'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 });
